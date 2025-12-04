@@ -73,3 +73,5 @@ class Loan {
     return this.sharePie.prorate(this.amount);
   }
 }
+
+export {};
