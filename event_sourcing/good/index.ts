@@ -1,7 +1,9 @@
-interface Item {
-  id: string;
-  name: string;
-  price: number;
+class Item {
+  constructor(
+    public readonly id: string,
+    public readonly name: string,
+    public readonly price: number
+  ) {}
 }
 
 // イベントの定義
@@ -101,8 +103,13 @@ type PersistedCartEvent = CartEvent & {
 };
 
 interface EventStore {
-  append(cartId: string, events: PersistedCartEvent[]): Promise<void>;
+  append(
+    cartId: string,
+    events: PersistedCartEvent[],
+    expectedVersion: number
+  ): Promise<void>;
   getEvents(cartId: string): Promise<CartEvent[]>;
+  getAllEvents(cartId: string): Promise<PersistedCartEvent[]>;
 }
 
 class CartRepository {
@@ -111,18 +118,22 @@ class CartRepository {
   async save(cartId: string, cart: Cart): Promise<void> {
     const domainEvents = cart.getUncommittedEvents();
 
+    // 現在のバージョンを取得
+    const existingEvents = await this.eventStore.getEvents(cartId);
+    const currentVersion = existingEvents.length;
+
     const persistedEvents: PersistedCartEvent[] = domainEvents.map(
       (event, index) => ({
         ...event,
         eventId: crypto.randomUUID(),
         cartId: cartId,
         timestamp: new Date(),
-        version: index + 1,
+        version: currentVersion + index + 1,
       })
     );
 
     // イベントストアに永続化
-    await this.eventStore.append(cartId, persistedEvents);
+    await this.eventStore.append(cartId, persistedEvents, currentVersion);
     cart.markEventsAsCommitted();
   }
 
@@ -140,8 +151,21 @@ class CartRepository {
 class InMemoryEventStore implements EventStore {
   private events = new Map<string, PersistedCartEvent[]>();
 
-  async append(cartId: string, events: PersistedCartEvent[]): Promise<void> {
+  async append(
+    cartId: string,
+    events: PersistedCartEvent[],
+    expectedVersion: number
+  ): Promise<void> {
     const existingEvents = this.events.get(cartId) || [];
+
+    // 楽観的ロックをチェック
+    if (existingEvents.length !== expectedVersion) {
+      throw new Error(
+        `Concurrency conflict: expected version ${expectedVersion}, ` +
+          `but current version is ${existingEvents.length}`
+      );
+    }
+
     this.events.set(cartId, [...existingEvents, ...events]);
   }
 
@@ -152,7 +176,7 @@ class InMemoryEventStore implements EventStore {
     );
   }
 
-  getAllEvents(cartId: string): PersistedCartEvent[] {
+  async getAllEvents(cartId: string): Promise<PersistedCartEvent[]> {
     return this.events.get(cartId) || [];
   }
 }
