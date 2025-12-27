@@ -201,12 +201,8 @@ async function main() {
   const cartRepository = new CartRepository(eventStore);
   const service = new CartApplicationService(cartRepository);
 
-  await service.addItemToCart("cart-1", {
-    id: "A",
-    name: "コーヒー",
-    price: 100,
-  });
-  await service.addItemToCart("cart-1", { id: "B", name: "紅茶", price: 200 });
+  await service.addItemToCart("cart-1", new Item("A", "コーヒー", 100));
+  await service.addItemToCart("cart-1", new Item("B", "紅茶", 200));
 
   const cart = await cartRepository.findById("cart-1");
   console.log(cart?.getTotalPrice()); // 300
