@@ -181,6 +181,7 @@ class InMemoryEventStore implements EventStore {
   }
 }
 
+// アプリケーションサービス層
 class CartApplicationService {
   constructor(private cartRepository: CartRepository) {}
 
